@@ -1,4 +1,20 @@
-exports.verifyAuth = (req, res, next) => {
+import { Request, Response, NextFunction } from 'express';
+
+interface User {
+	id: string;
+	name: string;
+	email: string;
+}
+
+declare global {
+	namespace Express {
+		interface Request {
+			user?: User;
+		}
+	}
+}
+
+export const verifyAuth = (req: Request, res: Response, next: NextFunction): Response | void => {
 	const authHeader = req.headers.authorization;
 
 	if (!authHeader || !authHeader.startsWith('Bearer ')) {
