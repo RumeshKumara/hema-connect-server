@@ -1,37 +1,31 @@
 import { Request, Response, NextFunction } from 'express';
+import { verifyToken, JwtPayload } from '../utils/jwt';
+import { sendError } from '../utils/response';
 
-interface User {
-	id: string;
-	name: string;
-	email: string;
-}
-
+// Extend Express Request to carry authenticated user
 declare global {
-	namespace Express {
-		interface Request {
-			user?: User;
-		}
-	}
+  namespace Express {
+    interface Request {
+      user?: JwtPayload;
+    }
+  }
 }
 
-export const verifyAuth = (req: Request, res: Response, next: NextFunction): Response | void => {
-	const authHeader = req.headers.authorization;
+export const verifyAuth = (req: Request, res: Response, next: NextFunction): void => {
+  const authHeader = req.headers.authorization;
 
-	if (!authHeader || !authHeader.startsWith('Bearer ')) {
-		return res.status(401).json({ message: 'Missing or invalid authorization header' });
-	}
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    sendError(res, 'Missing or invalid authorization header', 401);
+    return;
+  }
 
-	const token = authHeader.split(' ')[1];
+  const token = authHeader.split(' ')[1];
 
-	if (token !== 'demo-token') {
-		return res.status(401).json({ message: 'Invalid token' });
-	}
-
-	req.user = {
-		id: '1',
-		name: 'Demo User',
-		email: 'demo@example.com',
-	};
-
-	next();
+  try {
+    const decoded = verifyToken(token);
+    req.user = decoded;
+    next();
+  } catch {
+    sendError(res, 'Invalid or expired token', 401);
+  }
 };

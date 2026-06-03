@@ -1,43 +1,57 @@
 import { Request, Response } from 'express';
+import * as authService from '../services/auth.service';
+import { sendSuccess, sendError } from '../utils/response';
+import { Role } from '@prisma/client';
 
-interface RegisterRequest extends Request {
-	body: {
-		name?: string;
-		email?: string;
-	};
-}
+export const register = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { name, email, password, role } = req.body as {
+      name: string;
+      email: string;
+      password: string;
+      role?: Role;
+    };
 
-interface LoginRequest extends Request {
-	body: {
-		email?: string;
-	};
-}
+    if (!name || !email || !password) {
+      sendError(res, 'Name, email, and password are required', 400);
+      return;
+    }
 
-export const register = (req: RegisterRequest, res: Response): void => {
-	const { name, email } = req.body;
-
-	res.status(201).json({
-		message: 'Register endpoint is working',
-		user: {
-			name: name || null,
-			email: email || null,
-		},
-	});
+    const data = await authService.registerUser(name, email, password, role);
+    sendSuccess(res, data, 'Registration successful', 201);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Registration failed';
+    sendError(res, message, 400);
+  }
 };
 
-export const login = (req: LoginRequest, res: Response): void => {
-	const { email } = req.body;
+export const login = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { email, password } = req.body as { email: string; password: string };
 
-	res.status(200).json({
-		message: 'Login endpoint is working',
-		token: 'demo-token',
-		email: email || null,
-	});
+    if (!email || !password) {
+      sendError(res, 'Email and password are required', 400);
+      return;
+    }
+
+    const data = await authService.loginUser(email, password);
+    sendSuccess(res, data, 'Login successful');
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Login failed';
+    sendError(res, message, 401);
+  }
 };
 
-export const me = (req: Request, res: Response): void => {
-	res.status(200).json({
-		message: 'Protected route is working',
-		user: req.user,
-	});
+export const me = async (req: Request, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      sendError(res, 'Unauthorized', 401);
+      return;
+    }
+    const user = await authService.getMe(req.user.id);
+    sendSuccess(res, user, 'Profile fetched successfully');
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to fetch profile';
+    sendError(res, message, 500);
+  }
 };

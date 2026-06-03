@@ -1,0 +1,190 @@
+// Donation Management System - Prisma Schema
+// Stack: Express.js + MySQL + Prisma ORM
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum Role {
+  ADMIN
+  DONOR
+  ORGANIZATION
+}
+
+enum OrganizationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum SubmissionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum NotificationType {
+  SUBMISSION_APPROVED
+  SUBMISSION_REJECTED
+  NEW_CAMPAIGN
+  NEW_DONATION_RECEIVED
+  ADMIN_APPROVAL
+  CAMPAIGN_UPDATE
+}
+
+// ─── User ────────────────────────────────────────────────────────────────────
+
+model User {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String   @unique
+  password  String
+  role      Role     @default(DONOR)
+  createdAt DateTime @default(now())
+
+  donor         Donor?
+  organization  Organization?
+  submissions   FormSubmission[]
+  notifications Notification[]
+
+  @@map("users")
+}
+
+// ─── Donor ───────────────────────────────────────────────────────────────────
+
+model Donor {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @unique
+  phone     String?
+  address   String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("donors")
+}
+
+// ─── Organization ─────────────────────────────────────────────────────────────
+
+model Organization {
+  id               Int                @id @default(autoincrement())
+  userId           Int                @unique
+  organizationName String
+  location         String?
+  contactNumber    String?
+  description      String?            @db.Text
+  status           OrganizationStatus @default(PENDING)
+  createdAt        DateTime           @default(now())
+
+  user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  donationRequests DonationRequest[]
+
+  @@map("organizations")
+}
+
+// ─── Dynamic Form ─────────────────────────────────────────────────────────────
+
+model Form {
+  id          Int         @id @default(autoincrement())
+  title       String
+  description String?     @db.Text
+  createdById Int
+  isPublished Boolean     @default(false)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  fields      FormField[]
+  submissions FormSubmission[]
+
+  @@map("forms")
+}
+
+model FormField {
+  id          Int     @id @default(autoincrement())
+  formId      Int
+  label       String
+  type        String  // text | textarea | number | email | phone | date | time | dropdown | radio | checkbox | file
+  required    Boolean @default(false)
+  placeholder String?
+  options     String? @db.Text // JSON array for dropdown/radio/checkbox options
+  order       Int     @default(0)
+
+  form    Form                @relation(fields: [formId], references: [id], onDelete: Cascade)
+  answers SubmissionAnswer[]
+
+  @@map("form_fields")
+}
+
+// ─── Donation Request ─────────────────────────────────────────────────────────
+
+model DonationRequest {
+  id             Int          @id @default(autoincrement())
+  organizationId Int
+  title          String
+  description    String?      @db.Text
+  requiredCount  Int?
+  requiredDate   DateTime?
+  location       String?
+  contactNumber  String?
+  isPublished    Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("donation_requests")
+}
+
+// ─── Form Submission ──────────────────────────────────────────────────────────
+
+model FormSubmission {
+  id          Int              @id @default(autoincrement())
+  formId      Int
+  userId      Int
+  status      SubmissionStatus @default(PENDING)
+  submittedAt DateTime         @default(now())
+  reviewedAt  DateTime?
+  reviewNote  String?          @db.Text
+
+  form    Form               @relation(fields: [formId], references: [id])
+  user    User               @relation(fields: [userId], references: [id])
+  answers SubmissionAnswer[]
+
+  @@map("form_submissions")
+}
+
+model SubmissionAnswer {
+  id           Int    @id @default(autoincrement())
+  submissionId Int
+  fieldId      Int
+  value        String @db.Text
+
+  submission FormSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  field      FormField      @relation(fields: [fieldId], references: [id])
+
+  @@map("submission_answers")
+}
+
+// ─── Notification ─────────────────────────────────────────────────────────────
+
+model Notification {
+  id        Int              @id @default(autoincrement())
+  userId    Int
+  type      NotificationType
+  title     String
+  message   String           @db.Text
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
