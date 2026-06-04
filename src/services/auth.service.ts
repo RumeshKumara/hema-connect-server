@@ -1,34 +1,39 @@
+import admin from '../config/firebase';
 import * as userRepo from '../repositories/user.repository';
-import { signToken } from '../utils/jwt';
 import { Role } from '@prisma/client';
 
-export const registerUser = async (
-  name: string,
-  email: string,
-  password: string,
-  role?: Role,
-) => {
-  const existing = await userRepo.findUserByEmail(email);
-  if (existing) throw new Error('Email already in use');
+/**
+ * Called after first Firebase login to sync the Firebase user into the local DB.
+ * If the user already exists, returns the existing record.
+ * Also applies the stored DB role back as a Firebase Custom Claim.
+ */
+export const syncUser = async (uid: string, email: string, name: string) => {
+  let user = await userRepo.findUserByFirebaseUid(uid);
 
-  const user = await userRepo.createUser({ name, email, password, role });
-  const token = signToken({ id: user.id, email: user.email, role: user.role });
-  return { user, token };
+  if (!user) {
+    // First-time login: create a local DB record with default role DONOR
+    user = await userRepo.createFirebaseUser({ uid, email, name });
+  }
+
+  // Keep Firebase Custom Claim in sync with DB role
+  await admin.auth().setCustomUserClaims(uid, { role: user.role });
+
+  return user;
 };
 
-export const loginUser = async (email: string, password: string) => {
-  const user = await userRepo.findUserByEmail(email);
-  if (!user) throw new Error('Invalid email or password');
-
-  const valid = await userRepo.validatePassword(password, user.password);
-  if (!valid) throw new Error('Invalid email or password');
-
-  const token = signToken({ id: user.id, email: user.email, role: user.role });
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { password: _pw, ...safeUser } = user;
-  return { user: safeUser, token };
+/**
+ * Fetch the current user's profile from the local DB using their Firebase UID.
+ */
+export const getMe = async (uid: string) => {
+  return userRepo.findUserByFirebaseUid(uid);
 };
 
-export const getMe = async (id: number) => {
-  return userRepo.findUserById(id);
+/**
+ * Assign a role to a user (admin-only operation).
+ * Updates both the local DB and the Firebase Custom Claim.
+ */
+export const assignRole = async (uid: string, role: Role) => {
+  const user = await userRepo.updateUserRole(uid, role);
+  await admin.auth().setCustomUserClaims(uid, { role });
+  return user;
 };
