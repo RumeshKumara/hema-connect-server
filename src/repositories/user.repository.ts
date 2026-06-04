@@ -1,39 +1,55 @@
 import prisma from '../lib/prisma';
-import bcrypt from 'bcryptjs';
 import { Role } from '@prisma/client';
 
-export interface RegisterInput {
-  name: string;
+export interface FirebaseUserInput {
+  uid: string;    // Firebase UID
   email: string;
-  password: string;
+  name: string;
   role?: Role;
 }
 
-export const findUserByEmail = async (email: string) => {
-  return prisma.user.findUnique({ where: { email } });
-};
-
-export const findUserById = async (id: number) => {
+/**
+ * Find a user by their Firebase UID.
+ */
+export const findUserByFirebaseUid = async (uid: string) => {
   return prisma.user.findUnique({
-    where: { id },
-    select: { id: true, name: true, email: true, role: true, createdAt: true },
+    where: { firebaseUid: uid },
+    select: { id: true, firebaseUid: true, name: true, email: true, role: true, createdAt: true },
   });
 };
 
-export const createUser = async (input: RegisterInput) => {
-  const hashedPassword = await bcrypt.hash(input.password, 12);
+/**
+ * Find a user by email.
+ */
+export const findUserByEmail = async (email: string) => {
+  return prisma.user.findUnique({
+    where: { email },
+    select: { id: true, firebaseUid: true, name: true, email: true, role: true, createdAt: true },
+  });
+};
 
+/**
+ * Create a new user record linked to a Firebase UID (no password stored).
+ */
+export const createFirebaseUser = async (input: FirebaseUserInput) => {
   return prisma.user.create({
     data: {
-      name: input.name,
+      firebaseUid: input.uid,
       email: input.email,
-      password: hashedPassword,
+      name: input.name,
       role: input.role ?? 'DONOR',
     },
-    select: { id: true, name: true, email: true, role: true, createdAt: true },
+    select: { id: true, firebaseUid: true, name: true, email: true, role: true, createdAt: true },
   });
 };
 
-export const validatePassword = async (plain: string, hashed: string): Promise<boolean> => {
-  return bcrypt.compare(plain, hashed);
+/**
+ * Update a user's role by Firebase UID.
+ */
+export const updateUserRole = async (uid: string, role: Role) => {
+  return prisma.user.update({
+    where: { firebaseUid: uid },
+    data: { role },
+    select: { id: true, firebaseUid: true, name: true, email: true, role: true, createdAt: true },
+  });
 };

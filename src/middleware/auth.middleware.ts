@@ -1,17 +1,26 @@
 import { Request, Response, NextFunction } from 'express';
-import { verifyToken, JwtPayload } from '../utils/jwt';
+import admin from '../config/firebase';
 import { sendError } from '../utils/response';
 
-// Extend Express Request to carry authenticated user
+// Extend Express Request to carry the decoded Firebase token
 declare global {
   namespace Express {
     interface Request {
-      user?: JwtPayload;
+      user?: admin.auth.DecodedIdToken;
     }
   }
 }
 
-export const verifyAuth = (req: Request, res: Response, next: NextFunction): void => {
+/**
+ * Verifies the Firebase ID Token sent in the Authorization header.
+ * On success, attaches the decoded token to req.user.
+ * The token contains: uid, email, and any custom claims (e.g. role).
+ */
+export const verifyAuth = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -19,13 +28,13 @@ export const verifyAuth = (req: Request, res: Response, next: NextFunction): voi
     return;
   }
 
-  const token = authHeader.split(' ')[1];
+  const idToken = authHeader.split(' ')[1];
 
   try {
-    const decoded = verifyToken(token);
+    const decoded = await admin.auth().verifyIdToken(idToken);
     req.user = decoded;
     next();
   } catch {
-    sendError(res, 'Invalid or expired token', 401);
+    sendError(res, 'Invalid or expired Firebase token', 401);
   }
 };
